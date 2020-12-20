@@ -79,7 +79,7 @@ impl Graph {
 		}
 	}
 
-	pub fn label_connected_components(&self) -> Vec<ConnectedComponent> {
+	pub fn to_connected_components(&self) -> Vec<ConnectedComponent> {
 		let mut result: Vec<ConnectedComponent> = vec![];
 		while let Some(v) = self.verticies.iter().find(|x| {
 			!matches!(
