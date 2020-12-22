@@ -1,5 +1,5 @@
 use adjacent_pair_iterator::AdjacentPairIterator;
-use delaunator::{Point, Triangulation};
+use delaunator::{Point, Triangulation, EMPTY};
 use itertools::Itertools;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -19,6 +19,17 @@ pub struct ConnectedComponent {
 	pub vertex_indices: Vec<usize>,
 }
 
+pub trait FindLabel {
+	fn find_label_for(&self, vertex: &Vertex) -> Option<usize>;
+}
+
+impl FindLabel for Vec<ConnectedComponent> {
+	fn find_label_for(&self, vertex: &Vertex) -> Option<usize> {
+		self.iter()
+			.position(|cc| cc.vertex_indices.contains(&vertex.index))
+	}
+}
+
 impl Graph {
 	pub fn is_short(&self, from: &Vertex, to: &Vertex) -> bool {
 		let length = distance(from, to);
@@ -27,27 +38,6 @@ impl Graph {
 	pub fn is_long(&self, from: &Vertex, to: &Vertex) -> bool {
 		let length = distance(from, to);
 		length > from.local_mean + self.mean_std_deviation
-	}
-
-	pub fn short_neighbours(&self, of: &Vertex) -> Vec<usize> {
-		of.neighbours
-			.iter()
-			.filter(|i| {
-				let neighbour = &self.verticies[**i];
-				self.is_short(of, &neighbour)
-			})
-			.copied()
-			.collect()
-	}
-	pub fn long_neighbours(&self, of: &Vertex) -> Vec<usize> {
-		of.neighbours
-			.iter()
-			.filter(|i| {
-				let neighbour = &self.verticies[**i];
-				self.is_long(of, &neighbour)
-			})
-			.copied()
-			.collect()
 	}
 
 	pub fn filter_edges(&self, predicate: &dyn Fn(&Graph, &Edge) -> bool) -> Graph {
@@ -93,7 +83,27 @@ impl Graph {
 			self.build_connected_component(&mut cc.vertex_indices, v);
 			result.push(cc);
 		}
+		result.retain(|x| x.vertex_indices.len() > 1);
 		result
+	}
+
+	pub fn add_edges(
+		&mut self,
+		base: &Graph,
+		predicate: &dyn Fn(&Vertex, &Vertex, &Graph) -> bool,
+	) {
+		for edge in &base.active_edges {
+			if !self.active_edges.contains(&edge)
+				&& predicate(
+					&self.verticies[edge.vertex1],
+					&self.verticies[edge.vertex2],
+					&self,
+				) {
+				self.active_edges.push(*edge);
+				self.verticies[edge.vertex1].neighbours.push(edge.vertex2);
+				self.verticies[edge.vertex2].neighbours.push(edge.vertex1);
+			}
+		}
 	}
 }
 
@@ -127,18 +137,22 @@ impl ToGraph for Triangulation {
 		let mut verticies: Vec<Vertex> = vec![];
 
 		for i in 0..points.len() {
+			let ne = neighborhood(i, self);
+			for n in &ne {
+				assert!(n < &points.len());
+			}
 			let vertex = Vertex::new(
 				i,
 				Point {
 					x: points[i].x,
 					y: points[i].y,
 				},
-				neighborhood(i, self),
+				ne,
 			);
 			verticies.push(vertex);
 		}
 		for i in 0..points.len() {
-			verticies[i].local_mean = local_mean(i, &verticies[i].neighbours, &verticies)
+			verticies[i].local_mean = local_mean(i, &verticies[i].neighbours.as_slice(), &verticies)
 		}
 		for i in 0..points.len() {
 			verticies[i].local_std_dev =
@@ -152,28 +166,22 @@ impl ToGraph for Triangulation {
 			active_edges: self
 				.halfedges
 				.iter()
-				.adjacent_pairs()
-				.map(|(a, b)| Edge {
-					vertex1: *a,
-					vertex2: *b,
+				.batching(|it| match it.next() {
+					None => None,
+					Some(x) => match it.next() {
+						None => None,
+						Some(y) => Some((*x, *y)),
+					},
+				})
+				.filter(|e| e.1 != EMPTY && e.0 != EMPTY)
+				.map(|e| Edge {
+					vertex1: self.triangles[e.0],
+					vertex2: self.triangles[e.1],
 				})
 				.collect(),
 		}
 	}
 }
-
-//impl EdgeDataSource for Point {
-/* 	fn get_edge_data(&self, graph: &Triangulation, points: &[Point]) -> EdgeData {
-	let index = points.iter().position(|x| x == self).unwrap();
-	let neighbors = neighborhood(index, graph);
-	EdgeData {
-		index,
-		local_mean: local_mean(index, neighbors, points),
-		local_std_dev: local_std_deviation(index, neighbors, points),
-		neighborhood: neighbors,
-	}
-} */
-//}
 
 fn distance(p1: &Vertex, p2: &Vertex) -> f64 {
 	((p1.point.x - p2.point.x).powi(2) + (p1.point.y - p2.point.y).powi(2)).sqrt()
@@ -190,7 +198,8 @@ pub fn edges(point_index: usize, graph: &Triangulation) -> Vec<(usize, usize)> {
 				Some(y) => Some((*x, *y)),
 			},
 		})
-		.filter(|e| e.0 == point_index || e.1 == point_index)
+		.filter(|e| (e.0 == point_index || e.1 == point_index) && e.1 != EMPTY && e.0 != EMPTY)
+		.map(|e| (graph.triangles[e.0], graph.triangles[e.1]))
 		.collect()
 }
 
@@ -222,4 +231,39 @@ fn local_std_deviation(point_index: usize, neighborhood: &[usize], points: &[Ver
 		result += (nv.local_mean - distance(&cv, &nv)).powi(2) / (nv.neighbours.len() as f64);
 	}
 	result.sqrt()
+}
+
+#[test]
+fn name() {
+	let verticies = vec![
+		Vertex {
+			index: 0,
+			point: Point { x: 0.0, y: 0.0 },
+			local_mean: 0.0,
+			local_std_dev: 0.0,
+			neighbours: vec![],
+		},
+		Vertex {
+			index: 0,
+			point: Point { x: 0.0, y: 0.0 },
+			local_mean: 0.0,
+			local_std_dev: 0.0,
+			neighbours: vec![],
+		},
+		Vertex {
+			index: 0,
+			point: Point { x: 0.0, y: 0.0 },
+			local_mean: 0.0,
+			local_std_dev: 0.0,
+			neighbours: vec![],
+		},
+		Vertex {
+			index: 0,
+			point: Point { x: 0.0, y: 0.0 },
+			local_mean: 0.0,
+			local_std_dev: 0.0,
+			neighbours: vec![],
+		},
+	];
+	let local_mean = local_mean(0, &[1, 2], &verticies);
 }
