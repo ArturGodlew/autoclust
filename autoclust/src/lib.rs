@@ -27,11 +27,11 @@ pub fn autoclust(input: Vec<P>) -> PyResult<Vec<Res>> {
 	let points: Vec<Point> = input.iter().map(|x| Point { x: x.x, y: x.y }).collect();
 	let cc = autoclust_implementation(&points);
 	let mut result: Vec<Res> = vec![];
-	for i in 0..input.len() {
+	for i in input.iter().enumerate() {
 		result.push(Res {
-			x: input[i].x,
-			y: input[i].y,
-			label: match cc.find_label_for_index(i) {
+			x: i.1.x,
+			y: i.1.y,
+			label: match cc.find_label_for_index(i.0) {
 				Some(x) => x + 1,
 				None => 0,
 			},
