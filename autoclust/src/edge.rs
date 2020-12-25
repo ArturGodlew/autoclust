@@ -1,4 +1,3 @@
-use adjacent_pair_iterator::AdjacentPairIterator;
 use delaunator::{Point, Triangulation, EMPTY};
 use itertools::Itertools;
 
@@ -21,12 +20,17 @@ pub struct ConnectedComponent {
 
 pub trait FindLabel {
 	fn find_label_for(&self, vertex: &Vertex) -> Option<usize>;
+	fn find_label_for_index(&self, index: usize) -> Option<usize>;
 }
 
 impl FindLabel for Vec<ConnectedComponent> {
 	fn find_label_for(&self, vertex: &Vertex) -> Option<usize> {
 		self.iter()
 			.position(|cc| cc.vertex_indices.contains(&vertex.index))
+	}
+	fn find_label_for_index(&self, index: usize) -> Option<usize> {
+		self.iter()
+			.position(|cc| cc.vertex_indices.contains(&index))
 	}
 }
 

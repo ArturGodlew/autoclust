@@ -12,3 +12,6 @@ itertools = "0.9.0"
 collect_slice = "^1.2.0"
 filters = "0.4.0"
 adjacent-pair-iterator = "0.1.2"
+[dependencies.pyo3]
+version = "0.13.0"
+features = ["extension-module"]

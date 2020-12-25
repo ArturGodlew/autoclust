@@ -1,4 +1,4 @@
-use autoclust::autoclust;
+use autoclust::autoclust_implementation;
 use delaunator::Point;
 
 fn main() {
@@ -40,5 +40,5 @@ fn main() {
 			y: 41.0426,
 		},
 	];
-	autoclust(points.as_slice());
+	autoclust_implementation(points.as_slice());
 }

@@ -1,8 +1,11 @@
 mod edge;
+use crate::edge::ConnectedComponent;
 use delaunator::{triangulate, Point};
 use edge::{Edge, FindLabel, Graph, ToGraph};
+use pyo3::prelude::*;
+use pyo3::wrap_pyfunction;
 
-pub fn autoclust(points: &[Point]) {
+pub fn autoclust_implementation(points: &[Point]) -> Vec<ConnectedComponent> {
 	println!("pp{}", points.len());
 	let base_graph = triangulate(points).unwrap().to_graph(points);
 	let mut graph_with_filtered_edges = base_graph.filter_edges(&|g: &Graph, e: &Edge| {
@@ -16,6 +19,46 @@ pub fn autoclust(points: &[Point]) {
 			&& (!matches!(connected_components.find_label_for(&v1), None)
 				^ !matches!(connected_components.find_label_for(&v2), None))
 	});
+	graph_with_filtered_edges.to_connected_components()
+}
+
+#[pyfunction]
+pub fn autoclust(input: Vec<P>) -> PyResult<Vec<Res>> {
+	let points: Vec<Point> = input.iter().map(|x| Point { x: x.x, y: x.y }).collect();
+	let cc = autoclust_implementation(&points);
+	let mut result: Vec<Res> = vec![];
+	for i in 0..input.len() {
+		result.push(Res {
+			x: input[i].x,
+			y: input[i].y,
+			label: match cc.find_label_for_index(i) {
+				Some(x) => x + 1,
+				None => 0,
+			},
+		})
+	}
+	Ok(result)
+}
+
+#[pyclass]
+#[derive(FromPyObject)]
+pub struct P {
+	pub x: f64,
+	pub y: f64,
+}
+
+#[pyclass]
+pub struct Res {
+	pub x: f64,
+	pub y: f64,
+	pub label: usize,
+}
+
+#[pymodule]
+pub fn autoclust_mod(_: Python, m: &PyModule) -> PyResult<()> {
+	m.add_class::<P>()?;
+	m.add_function(wrap_pyfunction!(autoclust, m)?)?;
+	Ok(())
 }
 
 #[cfg(test)]
@@ -61,6 +104,6 @@ mod tests {
 				y: 41.0426,
 			},
 		];
-		crate::autoclust(&points);
+		autoclust::autoclust_implementation(&points);
 	}
 }
