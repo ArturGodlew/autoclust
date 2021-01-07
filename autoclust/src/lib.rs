@@ -23,7 +23,7 @@ pub fn autoclust_implementation(points: &[Point]) -> Vec<ConnectedComponent> {
 }
 
 #[pyfunction]
-pub fn autoclust(input: Vec<P>) -> PyResult<Vec<Res>> {
+pub fn auto_clust(input: Vec<P>) -> PyResult<Vec<Res>> {
 	let points: Vec<Point> = input.iter().map(|x| Point { x: x.x, y: x.y }).collect();
 	let cc = autoclust_implementation(&points);
 	let mut result: Vec<Res> = vec![];
@@ -43,8 +43,18 @@ pub fn autoclust(input: Vec<P>) -> PyResult<Vec<Res>> {
 #[pyclass]
 #[derive(FromPyObject)]
 pub struct P {
+	#[pyo3(get, set)]
 	pub x: f64,
+	#[pyo3(get, set)]
 	pub y: f64,
+}
+
+#[pymethods]
+impl P {
+	#[new]
+	pub fn new(x: f64, y: f64) -> Self {
+		P { x, y }
+	}
 }
 
 #[pyclass]
@@ -55,9 +65,10 @@ pub struct Res {
 }
 
 #[pymodule]
-pub fn autoclust_mod(_: Python, m: &PyModule) -> PyResult<()> {
+pub fn autoclust(_: Python, m: &PyModule) -> PyResult<()> {
 	m.add_class::<P>()?;
-	m.add_function(wrap_pyfunction!(autoclust, m)?)?;
+	m.add_class::<Res>()?;
+	m.add_wrapped(wrap_pyfunction!(auto_clust))?;
 	Ok(())
 }
 
