@@ -1,5 +1,6 @@
 autoclust/autoclust.egg-info/*
-target/*
+*/target/*
 */build/*
 autoclust/autoclust/autoclust.cp38-win_amd64.pyd
 autoclust/autoclust/__pycache__/__init__.cpython-38.pyc
+target

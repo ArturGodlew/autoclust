@@ -1,6 +1,0 @@
-[workspace]
-
-members = [
-	"autoclust",
-	"autoclust_test"
-]
