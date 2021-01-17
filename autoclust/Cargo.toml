@@ -15,7 +15,6 @@ adjacent-pair-iterator = "0.1.2"
 [dependencies.pyo3]
 version = "0.13.0"
 features = ["extension-module"]
-[lib]
-crate-type = ["cdylib"]
+
 [features]
 default = ["pyo3/extension-module"]

@@ -6,15 +6,13 @@
 	"configurations": [
 		{
 			"name": "Run Test Debugger",
-			"type": "cppvsdbg",
+			"type": "lldb",
 			"request": "launch",
-			"program": "${workspaceFolder}/target/debug/autoclust_test.exe",
+			"program": "${workspaceFolder}/target/debug/autoclust.exe",
 			"args": [],
-			"stopAtEntry": false,
 			"cwd": "${workspaceFolder}",
-			"environment": [],
-			"externalConsole": true,
 			"preLaunchTask": "cargo test build",
+			"sourceLanguages": ["rust"]
 		},
 	]
 }
