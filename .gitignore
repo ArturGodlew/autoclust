@@ -4,3 +4,4 @@ autoclust/autoclust.egg-info/*
 autoclust/autoclust/autoclust.cp38-win_amd64.pyd
 autoclust/autoclust/__pycache__/__init__.cpython-38.pyc
 target
+autoclust/dist/autoclust-1.0-py3.8-win-amd64.egg

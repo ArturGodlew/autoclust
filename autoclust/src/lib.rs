@@ -1,39 +1,30 @@
 mod edge;
-use crate::edge::ConnectedComponent;
 use delaunator::{triangulate, Point};
-use edge::{Edge, FindLabel, Graph, ToGraph};
+use edge::{Edge, EdgeType, ToGraph, Vertex};
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
-pub fn autoclust_implementation(points: &[Point]) -> Vec<ConnectedComponent> {
-	println!("pp{}", points.len());
+pub fn autoclust_implementation(points: &[Point]) -> Vec<Vertex> {
 	let base_graph = triangulate(points).unwrap().to_graph(points);
-	let mut graph_with_filtered_edges = base_graph.filter_edges(&|g: &Graph, e: &Edge| {
-		let x = g.is_long(&g.verticies[e.vertex1], &g.verticies[e.vertex2])
-			|| g.is_short(&g.verticies[e.vertex1], &g.verticies[e.vertex2]);
-		println!("{:?}", x);
-		x
-	});
-	let mut connected_components = graph_with_filtered_edges.to_connected_components();
+	let mut graph_with_filtered_edges = base_graph
+		.filter_edges(&|e: &Edge| e.edge_type == EdgeType::Short || e.edge_type == EdgeType::Long);
+	graph_with_filtered_edges.calculate_connected_components();
 
-	graph_with_filtered_edges.restore_edges(&base_graph, &mut connected_components);
+	graph_with_filtered_edges.restore_edges();
 
-	connected_components
+	graph_with_filtered_edges.verticies
 }
 
 #[pyfunction]
 pub fn auto_clust(input: Vec<P>) -> PyResult<Vec<Res>> {
 	let points: Vec<Point> = input.iter().map(|x| Point { x: x.x, y: x.y }).collect();
-	let cc = autoclust_implementation(&points);
+	let verticies = autoclust_implementation(&points);
 	let mut result: Vec<Res> = vec![];
-	for i in input.iter().enumerate() {
+	for v in verticies.iter() {
 		result.push(Res {
-			x: i.1.x,
-			y: i.1.y,
-			label: match cc.find_label_for_index(i.0) {
-				Some(x) => x + 1,
-				None => 0,
-			},
+			x: v.point.x,
+			y: v.point.y,
+			label: v.label,
 		})
 	}
 	Ok(result)
@@ -74,15 +65,6 @@ pub fn autoclust(_: Python, m: &PyModule) -> PyResult<()> {
 	m.add_wrapped(wrap_pyfunction!(auto_clust))?;
 	Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-	use crate::autoclust_implementation;
-	use delaunator::Point;
-	#[test]
-	fn it_works() {}
-}
-
 fn main() {
 	let points = [
 		Point {
@@ -3590,19 +3572,13 @@ fn main() {
 			y: -7.15329,
 		},
 	];
-	let cc = autoclust_implementation(&points);
+	let verticies = autoclust_implementation(&points);
 	let mut result: Vec<Res> = vec![];
-	for i in points.iter().enumerate() {
+	for v in verticies.iter() {
 		result.push(Res {
-			x: i.1.x,
-			y: i.1.y,
-			label: match cc.find_label_for_index(i.0) {
-				Some(x) => x,
-				None => 0,
-			},
+			x: v.point.x,
+			y: v.point.y,
+			label: v.label,
 		});
-	}
-	for v in &result {
-		println!("{:?}", v);
 	}
 }

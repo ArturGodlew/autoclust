@@ -1,11 +1,12 @@
 [package]
 name = "autoclust"
-version = "0.1.0"
+version = "0.3.0"
 authors = ["Adam Grabski <adam.gr@outlook.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
+[lib]	
+crate-type = ["cdylib"]
 [dependencies]
 delaunator = "0.2.0"
 itertools = "0.9.0"
