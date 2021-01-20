@@ -135,13 +135,32 @@ impl Graph {
 		label: usize,
 		cc_sizes: &mut HashMap<usize, usize>,
 	) {
-		*cc_sizes
-			.get_mut(&self.verticies[vertex_index].label)
-			.unwrap() -= 1;
-		*cc_sizes.get_mut(&label).unwrap() -= 1;
-		self.verticies[vertex_index].label = label;
-		for e in 0..self.verticies[vertex_index].edges.len() {
-			self.reassign(self.active_edges[e].other(vertex_index), label, cc_sizes);
+		if self.verticies[vertex_index].label != label {
+			*cc_sizes
+				.get_mut(&self.verticies[vertex_index].label)
+				.unwrap() -= 1;
+			*cc_sizes.get_mut(&label).unwrap() += 1;
+			let vertex = &mut self.verticies[vertex_index];
+			vertex.label = label;
+			for e in 0..vertex.edges.len() {
+				let edge = self.verticies[vertex_index].edges[e];
+				let other = self.active_edges[edge].other(vertex_index);
+				if self.active_edges[edge].edge_type == EdgeType::Short
+					&& self.verticies[other].label == label
+				{
+					self.active_edges[edge].active = true;
+				} else if self.active_edges[edge].edge_type == EdgeType::Short
+					&& self.verticies[other].label != label
+				{
+					self.active_edges[edge].active = false;
+				}
+
+				if self.active_edges[edge].edge_type == EdgeType::Medium
+					&& self.verticies[self.active_edges[edge].other(vertex_index)].label != label
+				{
+					self.active_edges[edge].active = false;
+				}
+			}
 		}
 	}
 
@@ -168,8 +187,9 @@ impl Graph {
 					if let Some(existing_reference) =
 						possible_labels.iter_mut().find(|x| x.label == other_label)
 					{
-						if existing_reference.size > other_size {
-							existing_reference.size = other_size
+						if existing_reference.size < other_size {
+							existing_reference.size = other_size;
+							existing_reference.edge_index = i;
 						}
 					} else {
 						possible_labels.push(LabelReference {
@@ -187,6 +207,40 @@ impl Graph {
 					self.active_edges[best_label.edge_index].active = true;
 				}
 			}
+		}
+	}
+
+	fn recalculate_k_neighbourhood(&mut self, vertex_index: usize) {
+		let mut edge_count: usize = 0;
+		let mut edge_sum = 0.0;
+		let mut visited_edges: Vec<usize> = vec![];
+		for &edge1 in self.verticies[vertex_index].edges.iter() {
+			if self.edge_is_active(edge1) {
+				let other = self.active_edges[edge1].other(vertex_index);
+
+				for &edge2 in self.verticies[other].edges.iter() {
+					if self.edge_is_active(edge2) && !visited_edges.contains(&edge2) {
+						edge_sum += self.active_edges[edge2].length;
+						edge_count += 1;
+						visited_edges.push(edge2);
+					}
+				}
+			}
+		}
+		self.verticies[vertex_index].local_mean = edge_sum / edge_count as f64;
+	}
+
+	pub fn recalculate_mean_with_k_neighbourhood(&mut self) {
+		for v in 0..self.verticies.len() {
+			self.recalculate_k_neighbourhood(v)
+		}
+
+		for v in self.verticies.iter_mut() {
+			for &e in v.edges.iter() {
+				let is_long = self.active_edges[e].length > v.local_mean + self.mean_std_deviation;
+				self.active_edges[e].active = !is_long;
+			}
+			v.label = 0;
 		}
 	}
 }

@@ -11,13 +11,12 @@ import importlib
 import autoclust
 importlib.reload(autoclust)
 
-data = arff.loadarff('data.arff')
-
+data = arff.loadarff('2.arff')
 df = pd.DataFrame(data[0])
 
-x = df.a0
-y = df.a1
-label = df.CLASS
+x = df.x
+y = df.y
+label = df.label
 
 fig, axs = plt.subplots(2)
 axs[0].scatter(x, y, c=label)
@@ -25,7 +24,7 @@ axs[0].scatter(x, y, c=label)
 points = []
 
 for i, row in df.iterrows():
-    points.append(P(row.a0, row.a1))
+    points.append(P(row.x, row.y))
 
 result = auto_clust(points)
 
@@ -40,4 +39,4 @@ for curr in result:
 
 axs[1].scatter(x, y, c=label)
 
-plt.show()
+plt.show()   
