@@ -119,12 +119,24 @@ impl Graph {
 			self.build_connected_component(v, cc_index);
 			cc_index += 1;
 		}
+
+		let groups = self.calculate_cc_sizes();
+		for (label, size) in groups {
+			if size == 1 {
+				for v in 0..self.verticies.len() {
+					if self.verticies[v].label == label {
+						self.verticies[v].label = 0;
+						break;
+					}
+				}
+			}
+		}
 	}
 
 	fn calculate_cc_sizes(&self) -> HashMap<usize, usize> {
 		let mut cc_sizes: HashMap<usize, usize> = HashMap::new();
 		for vertex in &self.verticies {
-			*cc_sizes.entry(vertex.label).or_insert(1) += 1;
+			*cc_sizes.entry(vertex.label).or_insert(0) += 1;
 		}
 		cc_sizes
 	}
@@ -149,15 +161,8 @@ impl Graph {
 					&& self.verticies[other].label == label
 				{
 					self.active_edges[edge].active = true;
-				} else if self.active_edges[edge].edge_type == EdgeType::Short
-					&& self.verticies[other].label != label
-				{
-					self.active_edges[edge].active = false;
 				}
-
-				if self.active_edges[edge].edge_type == EdgeType::Medium
-					&& self.verticies[self.active_edges[edge].other(vertex_index)].label != label
-				{
+				if self.verticies[other].label != label {
 					self.active_edges[edge].active = false;
 				}
 			}
@@ -238,7 +243,9 @@ impl Graph {
 		for v in self.verticies.iter_mut() {
 			for &e in v.edges.iter() {
 				let is_long = self.active_edges[e].length > v.local_mean + self.mean_std_deviation;
-				self.active_edges[e].active = !is_long;
+				if is_long {
+					self.active_edges[e].active = false;
+				}
 			}
 			v.label = 0;
 		}
