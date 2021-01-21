@@ -6,7 +6,8 @@ use std::collections::HashMap;
 pub struct Edge {
 	pub vertex1: usize,
 	pub vertex2: usize,
-	pub edge_type: EdgeType,
+	pub edge_type1: EdgeType,
+	pub edge_type2: EdgeType,
 	pub active: bool,
 	pub length: f64,
 }
@@ -26,11 +27,20 @@ impl Edge {
 		}
 		self.vertex1
 	}
-	pub fn new(v1: usize, v2: usize, t: EdgeType, length: f64) -> Edge {
+
+	pub fn edge_type(&self, perspective: usize) -> EdgeType {
+		if self.vertex1 == perspective {
+			return self.edge_type1;
+		}
+		self.edge_type2
+	}
+
+	pub fn new(v1: usize, v2: usize, t1: EdgeType, t2: EdgeType, length: f64) -> Edge {
 		Edge {
 			vertex1: v1,
 			vertex2: v2,
-			edge_type: t,
+			edge_type1: t1,
+			edge_type2: t2,
 			active: true,
 			length,
 		}
@@ -84,10 +94,12 @@ impl Graph {
 		EdgeType::Medium
 	}
 
-	pub fn filter_edges(&self, predicate: &dyn Fn(&Edge) -> bool) -> Graph {
+	pub fn filter_edges(&self) -> Graph {
 		let mut result = self.clone();
-		for edge in result.active_edges.iter_mut().filter(|e| predicate(e)) {
-			edge.active = false;
+		for edge in result.active_edges.iter_mut() {
+			if edge.edge_type1 != EdgeType::Medium && edge.edge_type2 != EdgeType::Medium {
+				edge.active = false;
+			}
 		}
 		result
 	}
@@ -157,7 +169,7 @@ impl Graph {
 			for e in 0..vertex.edges.len() {
 				let edge = self.verticies[vertex_index].edges[e];
 				let other = self.active_edges[edge].other(vertex_index);
-				if self.active_edges[edge].edge_type == EdgeType::Short
+				if self.active_edges[edge].edge_type(vertex_index) == EdgeType::Short
 					&& self.verticies[other].label == label
 				{
 					self.active_edges[edge].active = true;
@@ -176,11 +188,12 @@ impl Graph {
 			edge_index: usize,
 		};
 		let mut cc_sizes = self.calculate_cc_sizes();
+		let mut reassign_map: HashMap<usize, usize> = HashMap::new();
 		for i in 0..self.verticies.len() {
 			let short_edges: Vec<&Edge> = self.verticies[i]
 				.edges
 				.iter()
-				.filter(|e| self.active_edges[**e].edge_type == EdgeType::Short)
+				.filter(|e| self.active_edges[**e].edge_type(i) == EdgeType::Short)
 				.map(|x| &self.active_edges[*x])
 				.collect();
 			let label = self.verticies[i].label;
@@ -189,14 +202,10 @@ impl Graph {
 				let other_label = self.verticies[e.other(i)].label;
 				if other_label != 0 && label != other_label {
 					let other_size = cc_sizes[&other_label];
-					if let Some(existing_reference) =
-						possible_labels.iter_mut().find(|x| x.label == other_label)
-					{
-						if existing_reference.size < other_size {
-							existing_reference.size = other_size;
-							existing_reference.edge_index = i;
-						}
-					} else {
+					if matches!(
+						possible_labels.iter_mut().find(|x| x.label == other_label),
+						None
+					) {
 						possible_labels.push(LabelReference {
 							size: other_size,
 							label: other_label,
@@ -206,10 +215,23 @@ impl Graph {
 				}
 			}
 			if let Some(best_label) = possible_labels.iter().max_by_key(|x| x.size) {
-				let current_label_size = cc_sizes[&label];
-				if best_label.label != label && best_label.size > current_label_size {
-					self.reassign(i, best_label.label, &mut cc_sizes);
-					self.active_edges[best_label.edge_index].active = true;
+				if best_label.label != label {
+					*reassign_map.entry(i).or_insert(0) = best_label.label;
+				}
+			}
+		}
+
+		for (vertex, label) in reassign_map {
+			self.reassign(vertex, label, &mut cc_sizes);
+		}
+
+		for i in 0..self.verticies.len() {
+			for &edge in self.verticies[i].edges.iter() {
+				if self.active_edges[edge].edge_type(i) == EdgeType::Short
+					&& self.verticies[self.active_edges[edge].other(i)].label
+						== self.verticies[i].label
+				{
+					self.active_edges[edge].active = true;
 				}
 			}
 		}
@@ -218,7 +240,6 @@ impl Graph {
 	fn recalculate_k_neighbourhood(&mut self, vertex_index: usize) {
 		let mut edge_count: usize = 0;
 		let mut edge_sum = 0.0;
-		let mut visited_edges: Vec<usize> = vec![];
 		for &edge1 in self.verticies[vertex_index].edges.iter() {
 			if self.edge_is_active(edge1) {
 				let other = self.active_edges[edge1].other(vertex_index);
@@ -227,28 +248,44 @@ impl Graph {
 					if self.edge_is_active(edge2) && !visited_edges.contains(&edge2) {
 						edge_sum += self.active_edges[edge2].length;
 						edge_count += 1;
-						visited_edges.push(edge2);
 					}
 				}
 			}
 		}
 		self.verticies[vertex_index].local_mean = edge_sum / edge_count as f64;
+		self.verticies[vertex_index].local_std_dev =
+			local_std_deviation(vertex_index, &self.active_edges, &self.verticies)
 	}
 
 	pub fn recalculate_mean_with_k_neighbourhood(&mut self) {
 		for v in 0..self.verticies.len() {
-			self.recalculate_k_neighbourhood(v)
+			self.recalculate_k_neighbourhood(v);
+			self.verticies[v].label = 0;
 		}
 
-		for v in self.verticies.iter_mut() {
-			for &e in v.edges.iter() {
-				let is_long = self.active_edges[e].length > v.local_mean + self.mean_std_deviation;
-				if is_long {
-					self.active_edges[e].active = false;
+		self.mean_std_deviation = self.mean_std_deviation();
+		for v in 0..self.verticies.len() {
+			for e in 0..self.verticies[v].edges.len() {
+				let other = self.active_edges[self.verticies[v].edges[e]].other(v);
+				for e2 in 0..self.verticies[other].edges.len() {
+					let is_long = self.active_edges[self.verticies[other].edges[e2]].length
+						> self.verticies[v].local_mean + self.mean_std_deviation;
+					if is_long {
+						self.active_edges[self.verticies[other].edges[e2]].active = false;
+						self.mean_std_deviation = self.mean_std_deviation();
+						self.verticies[v].local_std_dev =
+							local_std_deviation(v, &self.active_edges, &self.verticies);
+					}
 				}
 			}
-			v.label = 0;
 		}
+	}
+
+	fn mean_std_deviation(&self) -> f64 {
+		self.verticies
+			.iter()
+			.fold(0.0, |acc, v| acc + v.local_std_dev)
+			/ self.verticies.len() as f64
 	}
 }
 
@@ -294,18 +331,21 @@ impl ToGraph for Triangulation {
 		for i in 0..points.len() {
 			verticies[i].local_std_dev = local_std_deviation(i, &all_edges, &verticies);
 		}
-		let global_mean_std_deviation =
-			verticies.iter().fold(0.0, |acc, v| acc + v.local_mean) / (verticies.len() as f64);
 		let mut result = Graph {
 			verticies,
-			mean_std_deviation: global_mean_std_deviation,
+			mean_std_deviation: 0.0,
 			active_edges: all_edges,
 		};
+		result.mean_std_deviation = result.mean_std_deviation();
 		for i in 0..result.active_edges.len() {
-			result.active_edges[i].edge_type = result.calculate_type(
+			result.active_edges[i].edge_type1 = result.calculate_type(
 				&result.verticies[result.active_edges[i].vertex1],
 				&result.verticies[result.active_edges[i].vertex2],
-			)
+			);
+			result.active_edges[i].edge_type2 = result.calculate_type(
+				&result.verticies[result.active_edges[i].vertex2],
+				&result.verticies[result.active_edges[i].vertex1],
+			);
 		}
 		result
 	}
@@ -335,17 +375,20 @@ pub fn all_edges(graph: &Triangulation, points: &[Point]) -> Vec<Edge> {
 			t.0,
 			t.1,
 			EdgeType::Empty,
+			EdgeType::Empty,
 			distance_point(&points[t.0], &points[t.1]),
 		);
 		let e2 = Edge::new(
 			t.1,
 			t.2,
 			EdgeType::Empty,
+			EdgeType::Empty,
 			distance_point(&points[t.1], &points[t.2]),
 		);
 		let e3 = Edge::new(
 			t.2,
 			t.0,
+			EdgeType::Empty,
 			EdgeType::Empty,
 			distance_point(&points[t.2], &points[t.0]),
 		);
@@ -386,9 +429,19 @@ pub fn local_mean(edges: &[Edge], edge_indicies: &[usize]) -> f64 {
 fn local_std_deviation(point_index: usize, edges: &[Edge], points: &[Vertex]) -> f64 {
 	let mut result = 0.0;
 	let current_vertex = &points[point_index];
-	for edge in current_vertex.edges.iter().map(|x| &edges[*x]) {
-		result +=
-			(current_vertex.local_mean - edge.length).powi(2) / (current_vertex.edges.len() as f64);
+	for edge in current_vertex
+		.edges
+		.iter()
+		.map(|x| &edges[*x])
+		.filter(|x| x.active)
+	{
+		result += (current_vertex.local_mean - edge.length).powi(2)
+			/ (current_vertex
+				.edges
+				.iter()
+				.map(|x| &edges[*x])
+				.filter(|x| x.active)
+				.count() as f64);
 	}
 	result.sqrt()
 }

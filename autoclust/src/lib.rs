@@ -1,13 +1,12 @@
 mod edge;
 use delaunator::{triangulate, Point};
-use edge::{Edge, EdgeType, ToGraph, Vertex};
+use edge::{ToGraph, Vertex};
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
 pub fn autoclust_implementation(points: &[Point]) -> (Vec<Vertex>, Vec<Vertex>, Vec<Vertex>) {
 	let base_graph = triangulate(points).unwrap().to_graph(points);
-	let mut graph_with_filtered_edges = base_graph
-		.filter_edges(&|e: &Edge| e.edge_type == EdgeType::Short || e.edge_type == EdgeType::Long);
+	let mut graph_with_filtered_edges = base_graph.filter_edges();
 	graph_with_filtered_edges.calculate_connected_components();
 
 	let v1 = graph_with_filtered_edges.verticies.clone();
