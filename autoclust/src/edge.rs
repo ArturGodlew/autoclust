@@ -245,7 +245,7 @@ impl Graph {
 				let other = self.active_edges[edge1].other(vertex_index);
 
 				for &edge2 in self.verticies[other].edges.iter() {
-					if self.edge_is_active(edge2) && !visited_edges.contains(&edge2) {
+					if self.edge_is_active(edge2) {
 						edge_sum += self.active_edges[edge2].length;
 						edge_count += 1;
 					}
